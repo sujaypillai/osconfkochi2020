@@ -1,0 +1,131 @@
+# az group create --name rg-dockeraci --location southeastasia
+# az container create -g MyResourceGroup --name myapp --image myimage:latest --cpu 1 --memory 1
+
+name: osconfkochi
+version: 0.1.0
+description: "A demo app for OSConf Kochi"
+# TODO: update the registry to your own, e.g. myregistry/porter-hello:v0.1.0
+tag: sujaypillai/porter-osconfkochi:v0.1.0
+
+# Uncomment the line below to use a template Dockerfile for your invocation image
+#dockerfile: Dockerfile.tmpl
+
+mixins:
+  - exec
+  - az
+
+credentials:
+  - name: subscription_id
+    env: AZURE_SUBSCRIPTION_ID
+
+  - name: tenant_id
+    env: AZURE_TENANT_ID
+
+  - name: client_id
+    env: AZURE_CLIENT_ID
+
+  - name: client_secret
+    env: AZURE_CLIENT_SECRET
+
+parameters:
+  - name: location
+    type: string
+    default: "southeastasia"
+
+  - name: resource_group_name
+    type: string
+    default: "rg-osconfkochi"
+
+  - name: app_name
+    type: string
+    default: "osconfkochi"
+
+#outputs:
+#  - name: "app_fqdn"
+#    description: "Fully Qualified Name for the Azure Container Instance"
+#    type: string
+#    applyTo:
+#      - install
+#  - name: "app_ip"
+#    description: "Fully Qualified Name for the Azure Container Instance"
+#    type: string
+#    applyTo:
+#      - install
+
+install:
+  - az:
+      description: "Azure CLI login"
+      arguments:
+        - login
+      flags:
+        service-principal:
+        username: "{{ bundle.credentials.client_id}}"
+        password: "{{ bundle.credentials.client_secret}}"
+        tenant: "{{ bundle.credentials.tenant_id}}"
+
+  - az:
+      description: "Create Resource Group"
+      arguments:
+        - group
+        - create
+      flags:
+        name : "{{bundle.parameters.resource_group_name}}"
+        location : "{{bundle.parameters.location}}"
+
+  - az:
+      description: "Create a ACI with 1 Core and 1Gb Memory"
+      arguments:
+        - container
+        - create
+      flags:
+        name : "{{bundle.parameters.app_name}}"
+        resource-group : "{{bundle.parameters.resource_group_name}}"
+        image : "sujaypillai/aci-helloworld:1.0"
+        location : "{{bundle.parameters.location}}"
+        cpu: "1"
+        memory: "1"
+        os-type: "Linux"
+        dns-name-label: "osconfkochi"
+      outputs:
+        - name: "app_fqdn"
+          jsonPath: "$.ipAddress.fqdn"
+        - name: "app_ip"
+          jsonPath: "$.ipAddress.ip"
+
+  - exec:
+      description: "What is my FQDN"
+      command: ./helpers.sh
+      arguments:
+        - "dump-ip {{bundle.outputs.app_fqdn}}"
+
+upgrade:
+  - exec:
+      description: "World 2.0"
+      command: ./helpers.sh
+      arguments:
+        - upgrade
+
+uninstall:
+  - exec:
+      description: "Uninstall Hello World"
+      command: ./helpers.sh
+      arguments:
+        - uninstall
+  - az:
+      description: "Azure CLI login"
+      arguments:
+        - login
+      flags:
+        service-principal:
+        username: "{{ bundle.credentials.client_id}}"
+        password: "{{ bundle.credentials.client_secret}}"
+        tenant: "{{ bundle.credentials.tenant_id}}"
+
+  - az:
+      description: "Create a ACI with 1 Core and 1Gb Memory"
+      arguments:
+        - container
+        - delete
+      flags:
+        name : "{{bundle.parameters.app_name}}"
+        resource-group : "{{bundle.parameters.resource_group_name}}"
